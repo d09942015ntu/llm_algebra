@@ -73,7 +73,7 @@ def evaluate(model, dataloader):
                 #    break
     return correct/(correct+incorrect)
 
-def T_evaluate(model, dataloader, Log, limit=5):
+def T_evaluate(model, dataloader, Log, limit=100):
     model.eval()
     correct = 0
     incorrect = 0
@@ -110,8 +110,8 @@ def T_evaluate(model, dataloader, Log, limit=5):
                             break
                 correct+=np.sum(labels_m1 == outputs_m1)
                 incorrect+=np.sum(labels_m1 != outputs_m1)
-                #if j > limit:
-                #    break
+                if j > limit:
+                    break
     return correct/(correct+incorrect)
 
 def main():

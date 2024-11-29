@@ -65,7 +65,7 @@ class StringOutputEvaluator(TrainerCallback):
         self.dataset_dir = dataset_dir
         self.logger = logger
         self.wait = 0
-        self.batch_size = 128
+        self.batch_size = 1
 
         self.Tdataloader = DataLoader(EvalDataset(self.dataset_dir, self.tokenizer, ftype='train'),
                                       batch_size=self.batch_size, shuffle=False)  # Multiple Batch Size requires paddings
