@@ -16,7 +16,7 @@ import torch
 import random
 import numpy as np
 import torch
-from transformers import AutoModelForCausalLM, AutoConfig 
+from transformers import AutoModelForCausalLM, AutoConfig, AutoTokenizer
 import torch.nn as nn
 import sys
 
@@ -119,20 +119,23 @@ class StringOutputEvaluator(TrainerCallback):
     
 def main():
     parser = argparse.ArgumentParser(description='Train a GPT-2 model.')
-    parser.add_argument('--model_name', type=str, default='./models/gpt2',  help='Pre-trained model name or path')
-    parser.add_argument('--dataset_dir', type=str, default='./data/ide_41_11',  help='Path to the training dataset')
+    parser.add_argument('--model_name', type=str, default='./mymodels/toytrans',  help='Pre-trained model name or path')
+    parser.add_argument('--dataset_dir', type=str, default='./data/ide_41_11_2',  help='Path to the training dataset')
     parser.add_argument('--output_dir', type=str, default='./results',  help='Path to output directory')
 
     args = parser.parse_args()
 
+    tokenizer_path = "./models/gpt2"
 
-    dataset_train_path = args.dataset_dir
-    model = GPT2LMHeadModel.from_pretrained(args.model_name,trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(args.model_name,trust_remote_code=True,ignore_mismatched_sizes=True)
     reinitialize_weights(model)
-    dataset_train = TrainDataset(args.dataset_dir, GPT2Tokenizer.from_pretrained(args.model_name))
-    dataset_eval = EvalDataset(args.dataset_dir, GPT2Tokenizer.from_pretrained(args.model_name))
-
-    model.resize_token_embeddings(len(dataset_train.tokenizer))
+    dataset_train = TrainDataset(args.dataset_dir, AutoTokenizer.from_pretrained(tokenizer_path))
+    dataset_eval = EvalDataset(args.dataset_dir, AutoTokenizer.from_pretrained(tokenizer_path))
+    
+    if 'resize_token_embeddings_by_tokenizer' in dir(model):
+        model.resize_token_embeddings_by_tokenizer(dataset_train.tokenizer)
+    else:
+        model.resize_token_embeddings(len(dataset_train.tokenizer))
 
     # Get the current date and time
     current_datetime = datetime.now()

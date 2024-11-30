@@ -21,7 +21,6 @@ import logging
 
 from transformers.configuration_utils import PretrainedConfig
 
-logger = logging.get_logger(__name__)
 
 
 class ToyTransConfig(PretrainedConfig):
@@ -107,22 +106,10 @@ class ToyTransConfig(PretrainedConfig):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
 
-    Example:
 
-    ```python
-    >>> from transformers import GPT2Config, GPT2Model
+    """
 
-    >>> # Initializing a GPT2 configuration
-    >>> configuration = GPT2Config()
-
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = GPT2Model(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "gpt2"
+    model_type = "toytrans"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "n_embd",
@@ -133,11 +120,11 @@ class ToyTransConfig(PretrainedConfig):
 
     def __init__(
             self,
-            vocab_size=50257,
-            n_positions=1024,
-            n_embd=768,
-            n_layer=12,
-            n_head=12,
+            vocab_size=40,
+            n_positions=40,
+            n_embd=40,
+            n_layer=1,
+            n_head=1,
             n_inner=None,
             activation_function="relu",
             resid_pdrop=0.1,
@@ -153,7 +140,7 @@ class ToyTransConfig(PretrainedConfig):
             scale_attn_weights=True,
             use_cache=True,
             bos_token_id=0,
-            eos_token_id=0,
+            eos_token_id=1,
             scale_attn_by_inverse_layer_idx=False,
             reorder_and_upcast_attn=False,
             **kwargs,
@@ -185,4 +172,32 @@ class ToyTransConfig(PretrainedConfig):
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
-
+        self.embed_map = {
+            "[0]": 0,
+            "[1]": 1,
+            "[2]": 2,
+            "[3]": 3,
+            "[4]": 4,
+            "[5]": 5,
+            "[6]": 6,
+            "[7]": 7,
+            "[8]": 8,
+            "[9]": 9,
+            "[10]": 10,
+            "[-1]": 11,
+            "[-2]": 12,
+            "[-3]": 13,
+            "[-4]": 14,
+            "[-5]": 15,
+            "[-6]": 16,
+            "[-7]": 17,
+            "[-8]": 18,
+            "[-9]": 19,
+            "[-10]": 20,
+            "[=]": 34,
+            "[+]": 35,
+            "[-]": 36,
+            "[x]": 37,
+            "[/]": 38,
+            "[PAD]": 39
+        }

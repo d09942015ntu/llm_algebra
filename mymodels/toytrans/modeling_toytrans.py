@@ -26,22 +26,17 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from configuration_toytrans import ToyTransConfig
+from .configuration_toytrans import ToyTransConfig
 import logging
 
 from transformers.modeling_utils import PreTrainedModel, SequenceSummary
+from transformers.generation import GenerationMixin
 import torch.nn.functional as F
 
-logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = ""
-_CONFIG_FOR_DOC = "GPT2Config"
 
 
 
-
-
-
+from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions, BaseModelOutputWithPastAndCrossAttentions
 
 
 class ToyTransPreTrainedModel(PreTrainedModel):
@@ -98,7 +93,7 @@ class ToyTransModel(ToyTransPreTrainedModel):
 
         self.embed_dim = config.hidden_size
 
-        self.embed_dim = config.embed_dim
+        self.embed_dim = config.n_embd
         #self.seq_len = seq_len
         # Learnable parameters for query, key, and value
 
@@ -133,13 +128,29 @@ class ToyTransModel(ToyTransPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
+    def attention(self, Q, K, V):
+        # Compute attention scores
+        scores = torch.matmul(Q, K.transpose(-2, -1)) #/ (self.embed_dim ** 0.5)
+        attention_weights = F.softmax(scores, dim=-1)
+
+        # Weighted sum of values
+        output = torch.matmul(attention_weights, V)
+        return output
+
     def forward(
             self,
             input_ids: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             **kargs,
     ) :
+
+        presents = () if use_cache else None
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         # Compute Q, K, V
         embed = self.wte(input_ids)
@@ -149,25 +160,40 @@ class ToyTransModel(ToyTransPreTrainedModel):
 
         # Apply attention
         attention_output = self.attention(Q, K, V)
+        print(f"attention_output:{attention_output}")
+
 
         # Residual connection and normalization
         #x = self.layer_norm1(attention_output)
 
         # Feedforward layer
-        x = F.relu(self.fc1(x))
-        ff_output = F.relu(self.fc2(x))
+        ff1_output = F.relu(self.fc1(attention_output))
+        ff2_output = F.relu(self.fc2(ff1_output))
 
         # Second residual connection and normalization
         #output = self.layer_norm2(ff_output)
 
         if output_hidden_states:
-            return (ff_output, (attention_output,embed), )
+            all_hidden_states = all_hidden_states + (ff2_output, ff1_output, attention_output, embed,)
 
-        else:
-            return ff_output,
+        if not return_dict:
+            return tuple(
+                v
+                for v in [ff2_output, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
+                if v is not None
+            )
+
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=ff2_output,
+            past_key_values=presents,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
+        )
 
 
-class ToyTransLMHeadModel(ToyTransModel):
+
+class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -193,22 +219,29 @@ class ToyTransLMHeadModel(ToyTransModel):
             self,
             input_ids: Optional[torch.LongTensor] = None,
             labels: Optional[torch.LongTensor] = None,
-            output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             **kargs
     ):
-
         transformer_outputs = self.transformer(
             input_ids,
+            labels=labels,
+            return_dict=return_dict,
+            **kargs,
         )
         hidden_states = transformer_outputs
 
         # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
-            hidden_states = hidden_states.to(self.lm_head.weight.device)
+        #if self.model_parallel:
+        #    torch.cuda.set_device(self.transformer.first_device)
+        #    hidden_states = hidden_states.to(self.lm_head.weight.device)
 
-        lm_logits = self.lm_head(hidden_states)
+        if isinstance(hidden_states, tuple):
+            lm_head_input = hidden_states[0]
+        elif isinstance(hidden_states,BaseModelOutputWithPastAndCrossAttentions):
+            lm_head_input = hidden_states.last_hidden_state
+        else:
+            lm_head_input = hidden_states
+        lm_logits = self.lm_head(lm_head_input)
 
         loss = None
         if labels is not None:
@@ -221,11 +254,53 @@ class ToyTransLMHeadModel(ToyTransModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-        if output_hidden_states:
+        #if output_hidden_states:
+        #    output = (lm_logits,) + transformer_outputs[1:]
+        #else:
+        #    output = lm_logits
+        #return ((loss,) + lm_logits) if loss is not None else output
+
+        if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
-        else:
-            output = (lm_logits,)
-        return ((loss,) + lm_logits) if loss is not None else output
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+            cross_attentions=transformer_outputs.cross_attentions,
+        )
+
+
+    @staticmethod
+    def _reorder_cache(
+            past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
+        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
+        beam_idx at every generation step.
+        """
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past_key_values
+        )
+
+    def resize_token_embeddings_by_tokenizer(self, tokenizer):
+        self.resize_token_embeddings(len(tokenizer))
+        with torch.no_grad():
+            self.transformer.wte.weight[:] = torch.zeros(self.transformer.wte.weight.shape).to(self.transformer.wte.weight.dtype)
+            self.transformer.query.weight[:] = torch.ones(self.transformer.query.weight.shape).to(self.transformer.query.weight.dtype)
+            self.transformer.key.weight[:] = torch.ones(self.transformer.key.weight.shape).to(self.transformer.key.weight.dtype)
+            self.transformer.value.weight[:] = torch.eye(self.transformer.value.weight.shape[0]).to(self.transformer.key.weight.dtype)
+            self.transformer.wte.weight.requires_grad = False
+            self.transformer.query.weight.requires_grad = False
+            self.transformer.key.weight.requires_grad = False
+            self.transformer.value.weight.requires_grad = False
+            for ikey, ival in self.config.embed_map.items():
+                self.transformer.wte.weight[tokenizer.encode(ikey),ival] = 1
 
 
 
