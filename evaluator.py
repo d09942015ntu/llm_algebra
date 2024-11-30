@@ -99,7 +99,7 @@ def T_evaluate(model, dataloader, Log, limit=100):
                     do_sample=True,
                     # force_words_ids = [tokenizer.additional_special_tokens_ids]
                 )
-                equal_sign_id = dataloader.dataset.tokenizer.encode(['[=]']) #50258
+                equal_sign_id = dataloader.dataset.tokenizer.encode('[=]')[0] #50258
                 labels_m1 = np.array([label.cpu().numpy()[0] for label in labels])
                 outputs_m1 = np.zeros(labels_m1.shape, dtype=np.int64)
                 for k, output_seq in enumerate(outputs):

@@ -160,7 +160,7 @@ class ToyTransModel(ToyTransPreTrainedModel):
 
         # Apply attention
         attention_output = self.attention(Q, K, V)
-        print(f"attention_output:{attention_output}")
+        #print(f"attention_output:{attention_output}")
 
 
         # Residual connection and normalization
@@ -200,10 +200,12 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.transformer = ToyTransModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head_backup = None
 
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+        self.tokenizer_offset = 0
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -222,6 +224,9 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
             return_dict: Optional[bool] = None,
             **kargs
     ):
+        input_ids = input_ids - self.tokenizer_offset
+        input_ids[input_ids<0] = 0
+        #print(input_ids)
         transformer_outputs = self.transformer(
             input_ids,
             labels=labels,
@@ -242,7 +247,11 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
         else:
             lm_head_input = hidden_states
         lm_logits = self.lm_head(lm_head_input)
-
+        #if self.tokenizer_offset > 0:
+        if self.lm_head_backup is not None:
+            lm_logits_backup = self.lm_head_backup(lm_head_input)
+            #lm_logits_backup = torch.zeros(lm_logits.shape[0],lm_logits.shape[1],self.tokenizer_offset).to(dtype=lm_logits.dtype,device=lm_logits.device)
+            lm_logits = torch.cat([lm_logits_backup, lm_logits],2)
         loss = None
         if labels is not None:
             # move labels to correct device to enable model parallelism
@@ -254,6 +263,12 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
+
+        #print(torch.sum(self.transformer.wte.weight))
+        #print(torch.sum(self.transformer.query.weight))
+        #print(torch.sum(self.transformer.key.weight))
+        #print(torch.sum(self.transformer.value.weight))
+        #print(torch.sum(self.lm_head_backup.weight))
         #if output_hidden_states:
         #    output = (lm_logits,) + transformer_outputs[1:]
         #else:
@@ -289,19 +304,27 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
         )
 
     def resize_token_embeddings_by_tokenizer(self, tokenizer):
-        self.resize_token_embeddings(len(tokenizer))
+        self.valid_tokens = {}
+        for ikey, ival in self.config.embed_map.items():
+            token_encoded = tokenizer.encode(ikey)
+            if len(token_encoded) == 1:
+                self.valid_tokens[token_encoded[0]] = ival
+        self.tokenizer_offset = min(self.valid_tokens.keys())
+        self.resize_token_embeddings(max(self.valid_tokens.keys()) - self.tokenizer_offset + 1)
+        self.lm_head_backup = nn.Linear(self.transformer.embed_dim, self.tokenizer_offset, bias=False)
         with torch.no_grad():
-            self.transformer.wte.weight[:] = torch.zeros(self.transformer.wte.weight.shape).to(self.transformer.wte.weight.dtype)
-            self.transformer.query.weight[:] = torch.ones(self.transformer.query.weight.shape).to(self.transformer.query.weight.dtype)
-            self.transformer.key.weight[:] = torch.ones(self.transformer.key.weight.shape).to(self.transformer.key.weight.dtype)
-            self.transformer.value.weight[:] = torch.eye(self.transformer.value.weight.shape[0]).to(self.transformer.key.weight.dtype)
+            self.transformer.wte.weight[:] = torch.zeros(self.transformer.wte.weight.shape).to(dtype=self.transformer.wte.weight.dtype)
+            self.transformer.query.weight[:] = torch.ones(self.transformer.query.weight.shape).to(dtype=self.transformer.query.weight.dtype)
+            self.transformer.key.weight[:] = torch.ones(self.transformer.key.weight.shape).to(dtype=self.transformer.key.weight.dtype)
+            self.transformer.value.weight[:] = torch.eye(self.transformer.value.weight.shape[0]).to(dtype=self.transformer.key.weight.dtype)
+            self.lm_head_backup.weight[:] = torch.zeros(self.lm_head_backup.weight.shape).to(self.lm_head_backup.weight.dtype)
             self.transformer.wte.weight.requires_grad = False
-            self.transformer.query.weight.requires_grad = False
-            self.transformer.key.weight.requires_grad = False
-            self.transformer.value.weight.requires_grad = False
-            for ikey, ival in self.config.embed_map.items():
-                self.transformer.wte.weight[tokenizer.encode(ikey),ival] = 1
-
+            #self.transformer.query.weight.requires_grad = False
+            #self.transformer.key.weight.requires_grad = False
+            #self.transformer.value.weight.requires_grad = False
+            self.lm_head_backup.weight.requires_grad = False
+            for tkey,tval in self.valid_tokens.items():
+                self.transformer.wte.weight[tkey-self.tokenizer_offset,tval] = 1
 
 
 

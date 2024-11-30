@@ -59,7 +59,8 @@ def reinitialize_weights(model) -> None:
                 nn.init.constant_(module.bias, 0)
 
 class StringOutputEvaluator(TrainerCallback):
-    def __init__(self, tokenizer,ckpt_path,dataset_dir, logger):
+    def __init__(self, model, tokenizer,ckpt_path,dataset_dir, logger):
+        self.model = model
         self.tokenizer = tokenizer
         self.ckpt_path = ckpt_path
         self.dataset_dir = dataset_dir
@@ -83,18 +84,18 @@ class StringOutputEvaluator(TrainerCallback):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
 
-        checkpoint_path = self.ckpt_path
+        #checkpoint_path = self.ckpt_path
 
-        ckpt_paths = glob.glob(os.path.join(checkpoint_path, "*"))
-        if len(ckpt_paths) == 0:
-            return
-        checkpoint_path = sorted(ckpt_paths)[-1]
-        model = GPT2LMHeadModel.from_pretrained(checkpoint_path)
-        model.to(device)
-        Taccuracy = T_evaluate(model, self.Tdataloader, state.log_history)
+        #ckpt_paths = glob.glob(os.path.join(checkpoint_path, "*"))
+        #if len(ckpt_paths) == 0:
+        #    return
+        #checkpoint_path = sorted(ckpt_paths)[-1]
+        self.model.to(device)
+        self.model.eval()
+        Taccuracy = T_evaluate(self.model, self.Tdataloader, state.log_history)
         #Eaccuracy0 = T_evaluate(model, self.Edataloader0, state.log_history)
-        Eaccuracy1 = T_evaluate(model, self.Edataloader1, state.log_history)
-        Eaccuracy2 = T_evaluate(model, self.Edataloader2, state.log_history)
+        Eaccuracy1 = T_evaluate(self.model, self.Edataloader1, state.log_history)
+        Eaccuracy2 = T_evaluate(self.model, self.Edataloader2, state.log_history)
         #Eaccuracy3 = T_evaluate(model, self.Edataloader3, state.log_history)
         epoch=state.log_history[-1]['epoch']
         loss=state.log_history[-1]['loss']
@@ -153,7 +154,7 @@ def main():
     training_args = TrainingArguments(
         output_dir=ckpt_path, # Directory to save the training results
         num_train_epochs=200000,        # Total number of training epochs
-        per_device_train_batch_size = 1024, # Batch size per device during training
+        per_device_train_batch_size = 1024, #1024, # Batch size per device during training
         save_steps=logging_step,                  # Save the model every 50 steps
         save_total_limit=3,             # Keep a maximum of 3 checkpoints
         logging_steps=logging_step,               # Log(output) after every 10 steps
@@ -167,7 +168,7 @@ def main():
         train_dataset=dataset_train,
         eval_dataset=dataset_eval,
         tokenizer=dataset_train.tokenizer,
-        callbacks = [StringOutputEvaluator(dataset_train.tokenizer, ckpt_path, args.dataset_dir, logger)]
+        callbacks = [StringOutputEvaluator(model, dataset_train.tokenizer, ckpt_path, args.dataset_dir, logger)]
     )
 
     # Train the model
