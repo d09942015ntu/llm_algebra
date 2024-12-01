@@ -177,6 +177,8 @@ def save_dataset(m=100, fname='inv_41',pn=2):
     #elif 'ide_41' in fname:
     #    train_set, test_set = dataset_ide_41(m)
     train_set_1, train_set_2, train_set_3, test_set_1, test_set_2, test_set_3 = dataset_inv_41(rng, m, pn/10)
+
+
     save_path = os.path.join('./data', f'ide_41_{m}_{pn}')
     os.makedirs(save_path,exist_ok=True)
 
@@ -192,8 +194,36 @@ def save_dataset(m=100, fname='inv_41',pn=2):
     write_to_csv(test_set_2, os.path.join(save_path,'test_ide.csv'), rng)
     write_to_csv(test_set_3, os.path.join(save_path,'test_inv.csv'), rng)
 
-
     write_to_csv(train_set_1+train_set_2, os.path.join(save_path,'train.csv'), rng)
+
+    token_list_filename = os.path.join(save_path,'tokens.json')
+    token_list = []
+    token_list.append('[=]')
+    token_list.append('[+]')
+    token_list.append('[-]')
+    token_list.append('[x]')
+    token_list.append('[/]')
+    for i in range(m):
+        token_list.append(f'[{i}]')
+    json.dump(token_list, open(token_list_filename,'w'), indent=2)
+
+
+    save_path = os.path.join('./data', f'com_41_{m}_{pn}')
+    os.makedirs(save_path,exist_ok=True)
+
+    write_to_csv(train_set_1+train_set_2+train_set_3, os.path.join(save_path,'train_all.csv'), rng)
+
+    write_to_csv(train_set_1, os.path.join(save_path,'train_com.csv'), rng)
+    write_to_csv(train_set_2, os.path.join(save_path,'train_ide.csv'), rng)
+    write_to_csv(train_set_3, os.path.join(save_path,'train_inv.csv'), rng)
+
+    write_to_csv(test_set_1, os.path.join(save_path,'test.csv'), rng)
+
+    write_to_csv(test_set_1, os.path.join(save_path,'test_com.csv'), rng)
+    write_to_csv(test_set_2, os.path.join(save_path,'test_ide.csv'), rng)
+    write_to_csv(test_set_3, os.path.join(save_path,'test_inv.csv'), rng)
+
+    write_to_csv(train_set_1, os.path.join(save_path,'train.csv'), rng)
 
 
     token_list_filename = os.path.join(save_path,'tokens.json')

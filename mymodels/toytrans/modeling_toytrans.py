@@ -99,16 +99,17 @@ class ToyTransModel(ToyTransPreTrainedModel):
 
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
 
-        self.query = nn.Linear(self.embed_dim, self.embed_dim)
-        self.key = nn.Linear(self.embed_dim, self.embed_dim)
-        self.value = nn.Linear(self.embed_dim, self.embed_dim)
+        self.query = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.key = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.value = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
 
         # Feedforward layer
-        self.fc1 = nn.Linear(self.embed_dim, self.embed_dim)
-        self.fc2 = nn.Linear(self.embed_dim, self.embed_dim)
+        self.fc1 = nn.Linear(self.embed_dim, self.embed_dim*10)
+        self.fc2 = nn.Linear(self.embed_dim*10, self.embed_dim)
 
         # Normalization
-        #self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        #self.layer_norm0 = nn.LayerNorm(self.embed_dim)
+        #self.layer_norm1 = nn.LayerNorm(self.embed_dim*10)
         #self.layer_norm2 = nn.LayerNorm(self.embed_dim)
 
         # Initialize weights and apply final processing
@@ -164,14 +165,17 @@ class ToyTransModel(ToyTransPreTrainedModel):
 
 
         # Residual connection and normalization
-        #x = self.layer_norm1(attention_output)
+        #attention_output = self.layer_norm0(attention_output)
 
         # Feedforward layer
         ff1_output = F.relu(self.fc1(attention_output))
+
+        #ff1_output = self.layer_norm1(ff1_output)
+
         ff2_output = F.relu(self.fc2(ff1_output))
 
         # Second residual connection and normalization
-        #output = self.layer_norm2(ff_output)
+        #ff2_output = self.layer_norm2(ff2_output)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (ff2_output, ff1_output, attention_output, embed,)
@@ -206,6 +210,7 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
         self.model_parallel = False
         self.device_map = None
         self.tokenizer_offset = 0
+        self.debug = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -231,6 +236,7 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
             input_ids,
             labels=labels,
             return_dict=return_dict,
+            output_hidden_states=True,
             **kargs,
         )
         hidden_states = transformer_outputs
@@ -263,7 +269,11 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-
+        if self.debug:
+            attention_result = transformer_outputs["hidden_states"][-2]
+            embedding_result = transformer_outputs["hidden_states"][-1]
+            print(f"attention_result:{attention_result}")
+            print(f"embedding_result:{embedding_result}")
         #print(torch.sum(self.transformer.wte.weight))
         #print(torch.sum(self.transformer.query.weight))
         #print(torch.sum(self.transformer.key.weight))
@@ -303,25 +313,27 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
             for layer_past in past_key_values
         )
 
-    def resize_token_embeddings_by_tokenizer(self, tokenizer):
+    def resize_token_embeddings_by_tokenizer(self, tokenizer, reinitialize=True):
         self.valid_tokens = {}
         for ikey, ival in self.config.embed_map.items():
             token_encoded = tokenizer.encode(ikey)
             if len(token_encoded) == 1:
                 self.valid_tokens[token_encoded[0]] = ival
         self.tokenizer_offset = min(self.valid_tokens.keys())
-        self.resize_token_embeddings(max(self.valid_tokens.keys()) - self.tokenizer_offset + 1)
+        if reinitialize:
+            self.resize_token_embeddings(max(self.valid_tokens.keys()) - self.tokenizer_offset + 1)
         self.lm_head_backup = nn.Linear(self.transformer.embed_dim, self.tokenizer_offset, bias=False)
         with torch.no_grad():
-            self.transformer.wte.weight[:] = torch.zeros(self.transformer.wte.weight.shape).to(dtype=self.transformer.wte.weight.dtype)
-            self.transformer.query.weight[:] = torch.ones(self.transformer.query.weight.shape).to(dtype=self.transformer.query.weight.dtype)
-            self.transformer.key.weight[:] = torch.ones(self.transformer.key.weight.shape).to(dtype=self.transformer.key.weight.dtype)
-            self.transformer.value.weight[:] = torch.eye(self.transformer.value.weight.shape[0]).to(dtype=self.transformer.key.weight.dtype)
+            if reinitialize:
+                self.transformer.wte.weight[:] = torch.zeros(self.transformer.wte.weight.shape).to(dtype=self.transformer.wte.weight.dtype)
+                self.transformer.query.weight[:] = torch.ones(self.transformer.query.weight.shape).to(dtype=self.transformer.query.weight.dtype)
+                self.transformer.key.weight[:] = torch.ones(self.transformer.key.weight.shape).to(dtype=self.transformer.key.weight.dtype)
+                self.transformer.value.weight[:] = torch.eye(self.transformer.value.weight.shape[0]).to(dtype=self.transformer.key.weight.dtype)
+                self.transformer.wte.weight.requires_grad = False
+                self.transformer.query.weight.requires_grad = False
+                self.transformer.key.weight.requires_grad = False
+                self.transformer.value.weight.requires_grad = False
             self.lm_head_backup.weight[:] = torch.zeros(self.lm_head_backup.weight.shape).to(self.lm_head_backup.weight.dtype)
-            self.transformer.wte.weight.requires_grad = False
-            #self.transformer.query.weight.requires_grad = False
-            #self.transformer.key.weight.requires_grad = False
-            #self.transformer.value.weight.requires_grad = False
             self.lm_head_backup.weight.requires_grad = False
             for tkey,tval in self.valid_tokens.items():
                 self.transformer.wte.weight[tkey-self.tokenizer_offset,tval] = 1

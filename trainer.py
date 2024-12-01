@@ -121,7 +121,7 @@ class StringOutputEvaluator(TrainerCallback):
 def main():
     parser = argparse.ArgumentParser(description='Train a GPT-2 model.')
     parser.add_argument('--model_name', type=str, default='./mymodels/toytrans',  help='Pre-trained model name or path')
-    parser.add_argument('--dataset_dir', type=str, default='./data/ide_41_11_2',  help='Path to the training dataset')
+    parser.add_argument('--dataset_dir', type=str, default='./data/ide_41_5_9',  help='Path to the training dataset')
     parser.add_argument('--output_dir', type=str, default='./results',  help='Path to output directory')
 
     args = parser.parse_args()
