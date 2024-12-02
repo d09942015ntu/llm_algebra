@@ -105,8 +105,8 @@ class ToyTransModel(ToyTransPreTrainedModel):
 
         # Feedforward layer
         self.fc1 = nn.Linear(self.embed_dim, self.embed_dim*10)
-        self.fc2 = nn.Linear(self.embed_dim*10, self.embed_dim)
-        #self.fc3 = nn.Linear(self.embed_dim*10, self.embed_dim)
+        self.fc2 = nn.Linear(self.embed_dim*10, self.embed_dim*10)
+        self.fc3 = nn.Linear(self.embed_dim*10, self.embed_dim)
 
         # Normalization
         #self.layer_norm0 = nn.LayerNorm(self.embed_dim)
@@ -176,23 +176,23 @@ class ToyTransModel(ToyTransPreTrainedModel):
         ff2_output = F.relu(self.fc2(ff1_output))
 
 
-        #ff3_output = F.relu(self.fc3(ff2_output))
+        ff3_output = F.relu(self.fc3(ff2_output))
 
         # Second residual connection and normalization
         #ff2_output = self.layer_norm2(ff2_output)
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (ff2_output, ff1_output, attention_output, embed,)
+            all_hidden_states = all_hidden_states + (ff3_output, ff2_output, ff1_output, attention_output, embed,)
 
         if not return_dict:
             return tuple(
                 v
-                for v in [ff2_output, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
+                for v in [ff3_output, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
                 if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=ff2_output,
+            last_hidden_state=ff3_output,
             past_key_values=presents,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
