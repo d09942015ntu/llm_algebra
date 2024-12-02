@@ -151,11 +151,12 @@ def main():
     logger = setup_logger("my_logger", os.path.join(output_dir,"trainer.log"))
 
     logging_step=1000
+    batch_size = 1024
 
     training_args = TrainingArguments(
         output_dir=ckpt_path, # Directory to save the training results
         num_train_epochs=2000000,        # Total number of training epochs
-        per_device_train_batch_size = 1024, #1024, # Batch size per device during training
+        per_device_train_batch_size = batch_size, #1024, # Batch size per device during training
         save_steps=logging_step,                  # Save the model every 50 steps
         save_total_limit=3,             # Keep a maximum of 3 checkpoints
         logging_steps=logging_step,               # Log(output) after every 10 steps
@@ -173,6 +174,7 @@ def main():
     )
 
     # Train the model
+    #model.debug=True
     trainer.train()
 
 # Initialize Trainer

@@ -106,6 +106,7 @@ class ToyTransModel(ToyTransPreTrainedModel):
         # Feedforward layer
         self.fc1 = nn.Linear(self.embed_dim, self.embed_dim*10)
         self.fc2 = nn.Linear(self.embed_dim*10, self.embed_dim)
+        #self.fc3 = nn.Linear(self.embed_dim*10, self.embed_dim)
 
         # Normalization
         #self.layer_norm0 = nn.LayerNorm(self.embed_dim)
@@ -173,6 +174,9 @@ class ToyTransModel(ToyTransPreTrainedModel):
         #ff1_output = self.layer_norm1(ff1_output)
 
         ff2_output = F.relu(self.fc2(ff1_output))
+
+
+        #ff3_output = F.relu(self.fc3(ff2_output))
 
         # Second residual connection and normalization
         #ff2_output = self.layer_norm2(ff2_output)
@@ -245,6 +249,9 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
         #if self.model_parallel:
         #    torch.cuda.set_device(self.transformer.first_device)
         #    hidden_states = hidden_states.to(self.lm_head.weight.device)
+        attention_result = ""
+        embedding_result = ""
+        shift_labels = ""
 
         if isinstance(hidden_states, tuple):
             lm_head_input = hidden_states[0]
@@ -270,10 +277,16 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if self.debug:
-            attention_result = transformer_outputs["hidden_states"][-2]
-            embedding_result = transformer_outputs["hidden_states"][-1]
+            if isinstance(transformer_outputs,dict):
+                attention_result = transformer_outputs["hidden_states"][-2]
+                embedding_result = transformer_outputs["hidden_states"][-1]
+            elif isinstance(transformer_outputs, tuple):
+                attention_result = transformer_outputs[1][-2]
+                embedding_result = transformer_outputs[1][-1]
+            print(f"input_labels:{input_ids}")
             print(f"attention_result:{attention_result}")
             print(f"embedding_result:{embedding_result}")
+            print(f"shift_labels:{shift_labels}")
         #print(torch.sum(self.transformer.wte.weight))
         #print(torch.sum(self.transformer.query.weight))
         #print(torch.sum(self.transformer.key.weight))
@@ -284,7 +297,6 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
         #else:
         #    output = lm_logits
         #return ((loss,) + lm_logits) if loss is not None else output
-
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output

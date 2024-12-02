@@ -15,7 +15,7 @@ class TrainDataset(Dataset):
         tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         tokenizer.add_special_tokens(special_tokens_dict)
         self.tokenizer = tokenizer
-        self.max_length = 10
+        self.max_length = 9
         self.rng = np.random.RandomState(0)
 
     def __len__(self):
@@ -28,12 +28,15 @@ class TrainDataset(Dataset):
         s1 = row['s1']
         s2 = row['s2']
 
-        input_text = s1 + s2
+        input_text = s1
+        full_text = s1 + s2
 
         encoding = self.tokenizer(input_text, truncation=True, max_length=self.max_length, padding='max_length')
+        encoding_full = self.tokenizer(full_text, truncation=True, max_length=self.max_length, padding='max_length')
         s1_encoded = self.tokenizer.encode(s1)
-        labels = encoding["input_ids"].copy()
+        labels = encoding_full["input_ids"].copy()
         labels[:len(s1_encoded)] = [-100]*len(s1_encoded)  # Mask `s1` tokens
+        labels[len(s1_encoded)+1:] = [-100]*len(labels[len(s1_encoded)+1:])  # Mask `s1` tokens
 
         return {
             'input_ids': torch.tensor(encoding['input_ids']),
@@ -69,7 +72,7 @@ class EvalDataset(TrainDataset):
 if __name__ == '__main__':
     model_name = 'gpt2'
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-    data_name='data/com_40_11'
+    data_name='data/ide_41_5_1'
     dataset = TrainDataset(data_name, tokenizer)
     for item in dataset:
         for key, value in item.items():
