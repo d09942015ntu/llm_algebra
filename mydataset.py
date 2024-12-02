@@ -60,13 +60,13 @@ class EvalDataset(TrainDataset):
         s1 = row['s1']
         s2 = row['s2']
 
-        encoding = self.tokenizer(s1, truncation=True, max_length=s1.count('+')*2+2, padding='max_length')
-        encoding_label = self.tokenizer(s2, truncation=True, max_length=1, padding='max_length')
+        encoding = self.tokenizer.encode(s1) #, truncation=True, max_length=s1.count('+')*2+2, padding='max_length')
+        encoding_label = self.tokenizer.encode(s2) #, truncation=True, max_length=1, padding='max_length')
 
         return {
-            'input_ids': torch.tensor(encoding['input_ids']),
-            'attention_mask': torch.tensor(encoding['attention_mask']),
-            'labels': torch.tensor(encoding_label['input_ids'])
+            'input_ids': torch.tensor(encoding),
+            'attention_mask': torch.ones(len(encoding)),
+            'labels': torch.tensor(encoding_label)
         }
 
 if __name__ == '__main__':
@@ -74,10 +74,11 @@ if __name__ == '__main__':
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
     data_name='data/ide_41_5_1'
     dataset = TrainDataset(data_name, tokenizer)
+    #dataset = EvalDataset(data_name, tokenizer)
     for item in dataset:
         for key, value in item.items():
-            if key == 'input_ids': #or key == 'labels':
-                raw = dataset.tokenizer.decode(value)
+            if key == 'input_ids' or key == 'labels':
+                raw = dataset.tokenizer.decode(value[value>0])
             else:
                 raw = "0"
             print(f"{key}: {raw} : {value}")  # Adjust processing logic as necessary
