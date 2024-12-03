@@ -22,7 +22,7 @@ tokenizer.add_special_tokens(special_tokens_dict)
 
 
 
-model_savepath = "./results_backup/20241202_085734-ide_41_5_9/checkpoints/checkpoint-2000000/"
+model_savepath = "./results_backup/20241203_084140-ide_41_5_9/checkpoints/checkpoint-39000/"
 model = ToyTransLMHeadModel.from_pretrained(model_savepath)
 model.resize_token_embeddings_by_tokenizer(tokenizer,reinitialize=False)
 model.debug = True

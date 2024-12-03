@@ -348,7 +348,8 @@ class ToyTransLMHeadModel(ToyTransPreTrainedModel, GenerationMixin):
             self.lm_head_backup.weight[:] = torch.zeros(self.lm_head_backup.weight.shape).to(self.lm_head_backup.weight.dtype)
             self.lm_head_backup.weight.requires_grad = False
             for tkey,tval in self.valid_tokens.items():
-                self.transformer.wte.weight[tkey-self.tokenizer_offset,tval] = 1
+                if tval != self.config.embed_map['[PAD]'] :
+                    self.transformer.wte.weight[tkey-self.tokenizer_offset,tval] = 1
 
 
 
